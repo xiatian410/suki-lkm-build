@@ -1,0 +1,27 @@
+name: Build LKM
+on: { workflow_dispatch: }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android17-6.18-20260828
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        run: |
+          set -eux
+          git config --global --add safe.directory '*'
+          TARGET=android17-6.18
+          if [ -z "${KDIR:-}" ] && [ -d "/opt/ddk/kdir/$TARGET" ]; then export KDIR="/opt/ddk/kdir/$TARGET"; fi
+          export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1
+          for d in /opt/ddk/clang/*/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
+          cd kernel
+          CONFIG_KSU=m CONFIG_KPM=y CC=clang make
+          mkdir -p out
+          cp kernelsu.ko "out/${TARGET}_kernelsu.ko"
+          llvm-strip -d "out/${TARGET}_kernelsu.ko"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lkm-${{ github.sha }}
+          path: kernel/out/*_kernelsu.ko
